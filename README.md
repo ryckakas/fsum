@@ -101,14 +101,14 @@ Exactness costs time. Each value is added into a short list of non-overlapping p
 grows with how many partials the data keeps alive: one to five for everyday data, dozens for data spread over the
 whole float64 range.
 
-Time to sum 1,000,000 values (Go 1.27.4, Intel i7-6800K, `go test -bench .`):
+Time to sum 1,000,000 values (Go 1.27.4, Apple M5, median of `go test -bench . -count 10`):
 
 | Data | Plain loop | Kahan | Neumaier | `fsum.Sum` | `Sum` vs plain loop |
 |---|---|---|---|---|---|
-| Uniform in [0, 1) | 0.89 ms | 3.68 ms | 1.56 ms | 14.5 ms | 16x |
-| Canceling pairs, shuffled | 0.88 ms | 3.70 ms | 1.54 ms | 46.8 ms | 53x |
-| Exponents spread over 2^-300 to 2^300 | 0.90 ms | 3.73 ms | 1.64 ms | 109 ms | 121x |
-| Exponents spread over the whole float64 range | 0.89 ms | 3.65 ms | 1.46 ms | 245 ms | 276x |
+| Uniform in [0, 1) | 0.56 ms | 1.91 ms | 1.15 ms | 3.86 ms | 7x |
+| Canceling pairs, shuffled | 0.57 ms | 1.92 ms | 1.16 ms | 23.5 ms | 41x |
+| Exponents spread over 2^-300 to 2^300 | 0.58 ms | 1.94 ms | 1.16 ms | 54.8 ms | 95x |
+| Exponents spread over the whole float64 range | 0.57 ms | 1.90 ms | 1.16 ms | 121 ms | 212x |
 
 Neumaier is the algorithm behind gonum's `floats.SumCompensated`; Kahan and Neumaier are faster but not exact.
 `Sum` makes no heap allocation unless the input keeps more than 32 partials alive. A faster O(1)-per-value

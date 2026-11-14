@@ -13,6 +13,7 @@ ACTIONLINT_VERSION := v1.7.12
 GITLEAKS_IMAGE := ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
 
 FUZZTIME ?= 10m
+PYTHON ?= python3
 
 .PHONY: help fmt lint complexity tidy-check zizmor gitleaks actionlint typos test race floor fuzz cover vuln golden crosscheck check
 
