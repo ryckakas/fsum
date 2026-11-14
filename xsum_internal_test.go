@@ -68,12 +68,12 @@ func TestNormalizeKeepsValueAndRanges(t *testing.T) {
 		if top < 0 {
 			continue
 		}
-		if a.chunk[top] == 0 || top > 0 && a.chunk[top] == -1 {
-			t.Fatalf("top chunk %d is %d", top, a.chunk[top])
+		if a.chunk[top] == 0 {
+			t.Fatalf("top chunk %d is zero", top)
 		}
-		for i := range top {
-			if a.chunk[i] < 0 || a.chunk[i] > lowMask {
-				t.Fatalf("chunk %d of %d is %d, outside [0, 2^32)", i, top, a.chunk[i])
+		for i := range min(top+1, lastChunk) {
+			if a.chunk[i] < -1<<31 || a.chunk[i] >= 1<<31 {
+				t.Fatalf("chunk %d of %d is %d, outside [-2^31, 2^31)", i, top, a.chunk[i])
 			}
 		}
 	}

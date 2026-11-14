@@ -44,7 +44,8 @@ const (
 // bits, so an add touches two of them and never carries. The zero value is an empty sum.
 type small struct {
 	chunk [chunks]int64
-	// used has bit i set when chunk i or i+1 may be non-zero. It lets tiny sums skip the untouched chunks.
+	// used has bit i set when chunk i may be non-zero. Bit 63 stands for chunks 63 and up. It lets sums of a
+	// few values skip the chunks nothing touched.
 	used uint64
 	adds int32
 }
@@ -59,7 +60,7 @@ func (a *small) put(b uint64) {
 	low := signed(mantissa << shift & lowMask)
 	high := signed(mantissa >> (lowBits - shift))
 
-	a.used |= 1 << i
+	a.used |= 3 << i
 	a.chunk[i] += (low ^ sign) - sign
 	a.chunk[i+1] += (high ^ sign) - sign
 }
@@ -71,99 +72,143 @@ func (a *small) putSubnormal(b uint64) {
 	low := signed(mantissa & lowMask)
 	high := signed(mantissa >> lowBits)
 
-	a.used |= 1
+	a.used |= 3
 	a.chunk[0] += (low ^ sign) - sign
 	a.chunk[1] += (high ^ sign) - sign
 }
 
 // normalize propagates carries upward and returns the index of the highest non-zero chunk, or -1 for a zero
-// sum. Afterwards that chunk carries the sign, in [-2^32, 2^32), and every chunk below it is in [0, 2^32).
+// sum. Afterwards every chunk but the last is a signed digit in [-2^31, 2^31), so the highest non-zero chunk
+// has the sign of the sum. Signed digits stop a carry at the first empty chunk, where unsigned ones would
+// ripple a borrow through every empty chunk between two distant values.
+//
 // The last chunk has nowhere to carry to: it absorbs, and stays exact far beyond any reachable input.
 func (a *small) normalize() int {
-	return a.propagate(0)
-}
-
-// propagate is normalize when sign is 0. When sign is -1 it negates the sum in the same pass.
-func (a *small) propagate(sign int64) int {
 	a.adds = 0
 	if a.used == 0 {
 		return -1
 	}
-	low := bits.TrailingZeros64(a.used)
-	top := a.highest(min(bits.Len64(a.used)+2, lastChunk))
-	if top < 0 {
-		a.used = 0
-		return -1
+	end := min(bits.Len64(a.used), lastChunk)
+	if a.used>>63 != 0 {
+		end = lastChunk
 	}
-	end := min(top+1, lastChunk)
-	carry := int64(0)
-	for i := low; i < end; i++ {
-		c := (a.chunk[i] ^ sign) - sign + carry
-		a.chunk[i] = c & lowMask
-		carry = c >> lowBits
+	nonZero, carry := uint64(0), int64(0)
+	for i := bits.TrailingZeros64(a.used); i < end; {
+		c := a.chunk[i] + carry
+		digit := lowDigit(c)
+		a.chunk[i] = digit
+		carry = (c - digit) >> lowBits
+		if digit != 0 {
+			nonZero |= 1 << min(i, 63)
+		}
+		i++
+		if carry == 0 {
+			i = a.nextUsed(i, end)
+		}
 	}
-	a.chunk[end] = (a.chunk[end] ^ sign) - sign + carry
-	top = a.foldMinusOnes(a.highest(end))
-	// The fold can move the top below low.
-	a.used = usedBetween(min(low, top), top)
-	return top
+	a.chunk[end] += carry
+	if a.chunk[end] != 0 {
+		nonZero |= 1 << min(end, 63)
+	}
+	a.used = nonZero
+	return a.highestUpTo(lastChunk)
 }
 
-func (a *small) highest(from int) int {
-	for i := from; i >= 0; i-- {
+// nextUsed returns the first index from i on whose chunk may be non-zero, at most end.
+func (a *small) nextUsed(i, end int) int {
+	if i >= 63 {
+		return min(i, end)
+	}
+	rest := a.used >> i
+	if rest == 0 {
+		return end
+	}
+	return min(i+bits.TrailingZeros64(rest), end)
+}
+
+// highestUpTo returns the index of the highest non-zero chunk at or below i, or -1. It needs the bitmap
+// normalize leaves, which is exact for the chunks below 63.
+func (a *small) highestUpTo(i int) int {
+	if i < 0 {
+		return -1
+	}
+	for ; i > 63; i-- {
 		if a.chunk[i] != 0 {
 			return i
 		}
 	}
-	return -1
+	return bits.Len64(a.used&(^uint64(0)>>(63-i))) - 1
 }
 
-// foldMinusOnes merges a top chunk of -1 into the chunk below, so a small negative sum does not climb one
-// chunk higher at every normalize.
-func (a *small) foldMinusOnes(top int) int {
-	for top > 0 && a.chunk[top] == -1 {
-		a.chunk[top] = 0
-		top--
-		a.chunk[top] -= 1 << lowBits
-	}
-	return top
-}
-
-func usedBetween(low, top int) uint64 {
-	if top < 0 {
-		return 0
-	}
-	return ^uint64(0) << low & (^uint64(0) >> (63 - min(top, 63)))
-}
-
-// round returns the sum rounded to the nearest float64, ties to even. A negative sum is negated first, so
-// only magnitudes are ever rounded and the two signs cannot disagree.
+// round returns the sum rounded to the nearest float64, ties to even. Only the magnitude is rounded, so the
+// two signs cannot disagree. It normalizes a.
 func (a *small) round() float64 {
 	top := a.normalize()
 	if top < 0 {
 		return 0
 	}
-	if a.chunk[top] > 0 {
-		return a.roundMagnitude(top)
+	sign := int64(1)
+	if a.chunk[top] < 0 {
+		sign = -1
 	}
-	return -a.roundMagnitude(a.propagate(-1))
+	if top == lastChunk {
+		return math.Inf(int(sign))
+	}
+	return float64(sign) * a.roundMagnitude(top, sign)
 }
 
-// roundMagnitude rounds a positive, normalized sum whose highest non-zero chunk is top.
-func (a *small) roundMagnitude(top int) float64 {
-	if top == lastChunk {
-		return math.Inf(1)
+// window holds the five highest base-2^32 digits of the magnitude, unsigned, and whether anything below them
+// is non-zero.
+type window struct {
+	digit  [5]uint64
+	sticky bool
+}
+
+// magnitudeWindow converts the signed digits from top-4 to top into unsigned digits of sign * sum. What lies
+// below matters only through its sign: a negative remainder borrows one from the lowest digit.
+func (a *small) magnitudeWindow(top int, sign int64) window {
+	var w window
+	borrow := int64(0)
+	if below := a.highestUpTo(top - 5); below >= 0 {
+		w.sticky = true
+		if sign*a.chunk[below] < 0 {
+			borrow = 1
+		}
+	}
+	for k := range w.digit {
+		d := -borrow
+		if i := top - 4 + k; i >= 0 {
+			d += sign * a.chunk[i]
+		}
+		borrow = 0
+		if d < 0 {
+			d += 1 << lowBits
+			borrow = 1
+		}
+		w.digit[k] = unsigned(d)
+	}
+	return w
+}
+
+// roundMagnitude rounds sign * sum, which is positive, where top is the highest non-zero chunk.
+func (a *small) roundMagnitude(top int, sign int64) float64 {
+	w := a.magnitudeWindow(top, sign)
+	hi, lo, sticky := w.digit[4]<<lowBits|w.digit[3], w.digit[2]<<lowBits|w.digit[1], w.sticky || w.digit[0] != 0
+	// A borrow can empty the top digit: the magnitude then starts one chunk lower.
+	if w.digit[4] == 0 {
+		top--
+		hi, lo, sticky = w.digit[3]<<lowBits|w.digit[2], w.digit[1]<<lowBits|w.digit[0], w.sticky
 	}
 	// Inputs are multiples of 2^-1074, so a sum below 2^-1021 is a float64 already: no rounding.
-	if units := unsigned(a.chunk[1])<<lowBits | unsigned(a.chunk[0]); top <= 1 && units < 1<<(mantissaBits+2) {
-		return math.Float64frombits(units >> 1)
+	if top <= 1 {
+		if units := hi >> (lowBits * (1 - top)); units < 1<<(mantissaBits+2) {
+			return math.Float64frombits(units >> 1)
+		}
 	}
 
-	hi := unsigned(a.chunk[top])<<lowBits | unsigned(a.chunk[top-1])
-	lo := a.below(top-2)<<lowBits | a.below(top-3)
 	shift := bits.LeadingZeros64(hi)
 	frac := hi<<shift | lo>>(64-shift)
-	sticky := lo<<shift != 0 || a.anyBetween(bits.TrailingZeros64(a.used), top-4)
+	sticky = sticky || lo<<shift != 0
 
 	mantissa := frac >> 11
 	rest := frac & 0x7ff
@@ -180,23 +225,12 @@ func (a *small) roundMagnitude(top int) float64 {
 	return math.Float64frombits(b)
 }
 
-func (a *small) anyBetween(low, high int) bool {
-	for i := low; i <= high; i++ {
-		if a.chunk[i] != 0 {
-			return true
-		}
-	}
-	return false
+// lowDigit returns the low 32 bits of c as a signed digit.
+func lowDigit(c int64) int64 {
+	return int64(int32(c)) //nolint:gosec // truncation is the point
 }
 
-func (a *small) below(i int) uint64 {
-	if i < 0 {
-		return 0
-	}
-	return unsigned(a.chunk[i])
-}
-
-// signed and unsigned reinterpret bits. Every use is a field of a float64 or a chunk known to be non-negative.
+// signed and unsigned reinterpret bits. Every use is a field of a float64 or a value known to be non-negative.
 func signed(u uint64) int64 {
 	return int64(u) //nolint:gosec // bit reinterpretation, see above
 }
