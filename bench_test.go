@@ -79,12 +79,13 @@ var benchClasses = []benchData{
 			xs[i] = randomFinite(r, -60, 60)
 			xs[i+1] = -xs[i]
 		}
+		r.Shuffle(n, func(i, j int) { xs[i], xs[j] = xs[j], xs[i] })
 		return xs
 	}},
-	{"adversarial", func(r *rand.Rand, n int) []float64 {
+	{"full-range", func(r *rand.Rand, n int) []float64 {
 		xs := make([]float64, n)
 		for i := range xs {
-			xs[i] = randomFinite(r, 1000-3*(i%690), 1000-3*(i%690))
+			xs[i] = randomFinite(r, -1074, 1023)
 		}
 		return xs
 	}},
