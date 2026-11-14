@@ -21,7 +21,9 @@ These are the product. A change that weakens one is a breaking change, whatever 
 
 1. Never panics, for any float64 input.
 2. The result does not depend on input order.
-3. The result is bit-identical to `Math.sumPrecise`, except that a NaN result is always `math.NaN()`.
+3. The result is bit-identical to what the `Math.sumPrecise` specification requires, except that a NaN result is
+   always `math.NaN()`. The specification is the oracle, not any one engine: engines return NaN in a corner (more
+   than 2^45 values with a huge running total) where the exact sum is finite.
 
 Each one has a test that fails when it breaks. Keep it that way.
 

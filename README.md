@@ -82,7 +82,10 @@ rounding does.
 
 1. No function panics, whatever float64 values it receives.
 2. The result does not depend on the order of the inputs.
-3. The result is bit-identical to `Math.sumPrecise`, except that every NaN result is `math.NaN()`.
+3. The result is bit-identical to what the `Math.sumPrecise` specification requires, except that every NaN result
+   is `math.NaN()`. Engines agree with it on any input you can hold in memory; by their source, they return NaN
+   once more than 2^45 values push the running total past about 2^1069, where the specification and fsum keep the
+   exact sum.
 
 ## How it's tested
 
@@ -90,39 +93,46 @@ rounding does.
   arithmetic (`scripts/gen_golden.py`) and checked against V8's own `Math.sumPrecise`
   (`scripts/crosscheck.mjs`). It covers every edge case above, the rounding ties, and random data near overflow,
   in the subnormal range and with heavy cancellation.
-- **A second, independent oracle**: `math/big` at 2,300 bits, used for inputs up to 100,000 values and by
-  `FuzzSum`, which runs in CI on every change.
+- **A second, independent oracle**: `math/big` at 2,300 bits, used for inputs up to 100,000 values and by the
+  fuzz targets, which run in CI on every change.
+- **A second exact engine**: the Shewchuk implementation from v0.1, kept in the tests and fuzzed against the
+  current one on inputs up to 200,000 values.
+- **The accumulator itself**: random internal states, including ones no real input reaches in a test, rounded
+  against `math/big`; negating every input must negate the result.
 - Every case goes through `Sum`, `SumSeq`, `Accumulator` (with a `Sum` call midway) and `Sum` on the reversed
   input. CI runs on amd64 and arm64, on Go 1.23 and the current release.
 
 ## Performance
 
-Exactness costs time. Each value is added into a short list of non-overlapping partial sums, so the cost per value
-grows with how many partials the data keeps alive: one to five for everyday data, dozens for data spread over the
-whole float64 range.
+Exactness costs time, but a constant amount per value. The running sum is a superaccumulator: 67 overlapping
+64-bit integer chunks, where adding a value touches two chunks and never carries. The cost does not depend on the
+data, and no function allocates.
 
 Time to sum 1,000,000 values (Go 1.27.4, Apple M5, median of `go test -bench . -count 10`):
 
 | Data | Plain loop | Kahan | Neumaier | `fsum.Sum` | `Sum` vs plain loop |
 |---|---|---|---|---|---|
-| Uniform in [0, 1) | 0.56 ms | 1.91 ms | 1.15 ms | 3.86 ms | 7x |
-| Canceling pairs, shuffled | 0.57 ms | 1.92 ms | 1.16 ms | 23.5 ms | 41x |
-| Exponents spread over 2^-300 to 2^300 | 0.58 ms | 1.94 ms | 1.16 ms | 54.8 ms | 95x |
-| Exponents spread over the whole float64 range | 0.57 ms | 1.90 ms | 1.16 ms | 121 ms | 212x |
+| Uniform in [0, 1) | 0.58 ms | 1.97 ms | 1.17 ms | 1.36 ms | 2.4x |
+| Canceling pairs, shuffled | 0.58 ms | 2.01 ms | 1.18 ms | 1.54 ms | 2.6x |
+| Exponents spread over 2^-300 to 2^300 | 0.58 ms | 1.99 ms | 1.17 ms | 1.42 ms | 2.4x |
+| Exponents spread over the whole float64 range | 0.59 ms | 2.01 ms | 1.17 ms | 1.58 ms | 2.7x |
 
-Neumaier is the algorithm behind gonum's `floats.SumCompensated`; Kahan and Neumaier are faster but not exact.
-`Sum` makes no heap allocation unless the input keeps more than 32 partials alive. A faster O(1)-per-value
-algorithm (Neal's xsum, used by V8 for `Math.sumPrecise`) is planned for a later version, with the same results
-bit for bit.
+Neumaier is the algorithm behind gonum's `floats.SumCompensated`; Kahan and Neumaier are not exact.
+
+Short inputs pay a fixed cost for rounding: `Sum` takes about 1.4 ns for one or two values, 16 to 32 ns for three
+and 160 to 230 ns for a hundred. An `Accumulator` costs about 2.3 ns per value and holds its state inline,
+about 560 bytes.
 
 ## Credits
 
+- Radford M. Neal, "Fast exact summation using small and large superaccumulators" (2015) and his
+  [xsum](https://gitlab.com/radfordneal/xsum): the superaccumulator. `xsum.go` carries its licence notice.
 - Jonathan Richard Shewchuk, "Adaptive Precision Floating-Point Arithmetic and Fast Robust Geometric
-  Predicates" (1997): the non-overlapping partials.
+  Predicates" (1997): the non-overlapping partials of the first engine, which the tests still compare against.
 - Python's [`math.fsum`](https://github.com/python/cpython/blob/main/Modules/mathmodule.c): the summation
-  loop and the half-way rounding correction.
+  loop and the half-way rounding correction of that first engine.
 - The TC39 [`Math.sumPrecise` proposal](https://github.com/tc39/proposal-math-sum) and its polyfill by Kevin
-  Gibbons: the semantics and the overflow handling. `state.go` carries the licence notices.
+  Gibbons: the semantics, and the overflow handling of the first engine. `shewchuk_test.go` carries the licence notices.
 
 ## License
 
