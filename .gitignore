@@ -1,0 +1,25 @@
+# Planning artifacts stay local
+.plans/
+
+# Go test / coverage artifacts
+*.test
+*.out
+coverage.*
+
+# Go workspace files (each dev opts in locally)
+go.work
+go.work.sum
+
+# Scratch
+/tmp/
+__pycache__/
+
+# Editor / IDE / agent noise
+.idea/
+.vscode/
+*.swp
+.claude/worktrees/
+
+# OS noise
+.DS_Store
+Thumbs.db
