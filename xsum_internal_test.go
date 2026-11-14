@@ -44,6 +44,15 @@ func randomChunks(r *rand.Rand) *small {
 	}
 	// Units below 2^-1074 never occur: every float64 is a multiple of it.
 	a.chunk[0] &^= 1
+	// Half the states get the tightest bitmap their chunks allow, as real adds would leave it.
+	if r.IntN(2) == 0 {
+		a.used = 0
+		for i, c := range a.chunk {
+			if c != 0 {
+				a.used |= 1 << min(i, 63)
+			}
+		}
+	}
 	return a
 }
 
