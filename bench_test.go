@@ -99,12 +99,13 @@ var benchFuncs = []struct {
 	{"kahan", kahanSum},
 	{"neumaier", neumaierSum},
 	{"Sum", fsum.Sum[[]float64]},
+	{"v0.1", fsum.ShewchukSum},
 	{"Accumulator", accumulatorSum},
 }
 
 func BenchmarkSum(b *testing.B) {
 	for _, class := range benchClasses {
-		for _, n := range []int{10, 1_000, 1_000_000} {
+		for _, n := range []int{1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 100, 1_000, 1_000_000} {
 			xs := class.gen(rand.New(rand.NewPCG(uint64(n), 7)), n)
 			for _, f := range benchFuncs {
 				b.Run(fmt.Sprintf("%s/n=%d/%s", class.name, n, f.name), func(b *testing.B) {

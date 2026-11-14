@@ -21,7 +21,9 @@ These are the product. A change that weakens one is a breaking change, whatever 
 
 1. Never panics, for any float64 input.
 2. The result does not depend on input order.
-3. The result is bit-identical to `Math.sumPrecise`, except that a NaN result is always `math.NaN()`.
+3. The result is bit-identical to what the `Math.sumPrecise` specification requires, except that a NaN result is
+   always `math.NaN()`. The specification is the oracle, not any one engine: engines return NaN in a corner (more
+   than 2^45 values with a huge running total) where the exact sum is finite.
 
 Each one has a test that fails when it breaks. Keep it that way.
 
@@ -30,7 +32,7 @@ Each one has a test that fails when it breaks. Keep it that way.
 Run `make check` before considering a change done; green there should mean green in CI. It runs golangci-lint,
 bonsai-lint, the go mod tidy drift check, zizmor (offline), gitleaks over the whole git history,
 actionlint (with shellcheck), typos, race tests on the pinned toolchain, plain tests on the floor Go, govulncheck
-and `go vet`. Before a release, `make fuzz` (10 minutes by default) must find nothing.
+and `go vet`. Before a release, `make fuzz` (10 minutes per fuzz target by default) must find nothing.
 
 - Never report a gate as green that you did not actually run. Fix violations in the same change; flag
   pre-existing ones instead of silently widening a change.
@@ -50,6 +52,9 @@ restate what the code already says.
 
 No em dashes (or en dashes used as dashes) in docs, the README or comments. Use a colon, a comma, parentheses or
 two sentences instead.
+
+**Licence headers are an exception too.** A file translated from third-party code keeps that code's copyright
+and licence notice in a header comment, separated from the `package` line by a blank line.
 
 **API docs are the other exception.** Every exported identifier has a doc comment; revive enforces it. The first
 sentence says what the item is, starting with its name. The rest adds only what the signature can't say.

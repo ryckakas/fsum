@@ -20,12 +20,13 @@
 //
 //   - No function panics, whatever float64 values it receives.
 //   - The result does not depend on the order of the inputs.
-//   - The result is bit-identical to Math.sumPrecise for the same inputs, except that every NaN result is
-//     math.NaN().
+//   - The result is bit-identical to what the Math.sumPrecise specification requires, except that every NaN
+//     result is math.NaN().
 //
 // # Cost
 //
-// The exact running sum is a short list of non-overlapping partial sums (Shewchuk's algorithm, as in Python's
-// math.fsum). Each value costs time proportional to the number of partials, which stays at one to five for
-// everyday data. Sum allocates nothing unless the input keeps more than 32 partials alive.
+// The exact running sum is a superaccumulator (Neal's xsum): 67 overlapping 64-bit chunks, where adding a
+// value touches two chunks and never carries. Each value costs the same small, constant time whatever the data,
+// about two to three times a plain loop, and no function allocates. Sum answers one or two values directly;
+// from three values on, rounding adds a fixed cost of some tens of nanoseconds.
 package fsum
