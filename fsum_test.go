@@ -88,6 +88,7 @@ func checkAll(t *testing.T, xs []float64, want float64) {
 			t.Errorf("%s = %v (%016x), want %v (%016x)", api, got, math.Float64bits(got), want, math.Float64bits(want))
 		}
 	}
+	checkNegated(t, xs, want)
 }
 
 func TestGolden(t *testing.T) {

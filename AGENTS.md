@@ -30,7 +30,7 @@ Each one has a test that fails when it breaks. Keep it that way.
 Run `make check` before considering a change done; green there should mean green in CI. It runs golangci-lint,
 bonsai-lint, the go mod tidy drift check, zizmor (offline), gitleaks over the whole git history,
 actionlint (with shellcheck), typos, race tests on the pinned toolchain, plain tests on the floor Go, govulncheck
-and `go vet`. Before a release, `make fuzz` (10 minutes by default) must find nothing.
+and `go vet`. Before a release, `make fuzz` (10 minutes per fuzz target by default) must find nothing.
 
 - Never report a gate as green that you did not actually run. Fix violations in the same change; flag
   pre-existing ones instead of silently widening a change.
