@@ -84,6 +84,7 @@ floor:
 fuzz:
 	go test -run '^$$' -fuzz '^FuzzSum$$' -fuzztime $(FUZZTIME) .
 	go test -run '^$$' -fuzz '^FuzzSumRepeated$$' -fuzztime $(FUZZTIME) .
+	go test -run '^$$' -fuzz '^FuzzEngines$$' -fuzztime $(FUZZTIME) .
 
 cover:
 	go test -race -coverprofile=coverage.out -covermode=atomic ./...
