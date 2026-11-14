@@ -1,0 +1,98 @@
+version: "2"
+
+# The default caps hide how much a newly enabled linter flags.
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters:
+  default: none
+  enable:
+    - bidichk
+    - copyloopvar
+    - dupl
+    - dupword
+    - errcheck
+    - errorlint
+    - exhaustive
+    - forcetypeassert
+    - gocheckcompilerdirectives
+    - gocritic
+    - gosec
+    - govet
+    - ineffassign
+    - intrange
+    - misspell
+    - nakedret
+    - nestif
+    - nolintlint
+    - perfsprint
+    - prealloc
+    - predeclared
+    - reassign
+    - recvcheck
+    - revive
+    - staticcheck
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - unused
+    - usestdlibvars
+    - usetesting
+    - wastedassign
+
+  settings:
+    nestif:
+      min-complexity: 7
+
+    exhaustive:
+      default-signifies-exhaustive: false
+
+    misspell:
+      locale: US
+
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
+    gosec:
+      excludes:
+        - G104
+
+    # `exported` + `package-comments` enforce the API-docs rule in AGENTS.md § Comments.
+    revive:
+      rules:
+        - name: exported
+          arguments:
+            - checkPrivateReceivers
+            - sayRepetitiveInsteadOfStutters
+        - name: package-comments
+        - name: var-naming
+        - name: unused-parameter
+          arguments:
+            - allowRegex: "^_"
+        - name: redefines-builtin-id
+        - name: blank-imports
+        - name: unexported-return
+        - name: error-return
+
+  exclusions:
+    rules:
+      # Noise in tests: permissive fixtures, and assertions whose panic already fails the test.
+      - path: _test\.go
+        linters:
+          - dupl
+          - errcheck
+          - forcetypeassert
+          - gosec
+          - unparam
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/ryckakas/fsum
