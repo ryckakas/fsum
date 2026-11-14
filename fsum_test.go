@@ -61,10 +61,14 @@ func loadGolden(t *testing.T) []goldenCase {
 	return cases
 }
 
-// entryPoints sums xs through every public API, in the given order and reversed.
+// entryPoints sums xs through every public API, in the given order and reversed. The Accumulator reads its
+// sum halfway through, which must not disturb the final result.
 func entryPoints(xs []float64) map[string]float64 {
 	var acc fsum.Accumulator
-	for _, x := range xs {
+	for i, x := range xs {
+		if i == len(xs)/2 {
+			acc.Sum()
+		}
 		acc.Add(x)
 	}
 	reversed := slices.Clone(xs)
@@ -143,33 +147,32 @@ func TestNaNIsCanonical(t *testing.T) {
 func TestNamedFloatType(t *testing.T) {
 	type meters float64
 	tenths := slices.Repeat([]meters{0.1}, 10)
-	if got := fsum.Sum(tenths); got != 1 {
-		t.Errorf("Sum = %v, want 1", got)
+	want := oracleSum(slices.Repeat([]float64{0.1}, 10))
+	if got := float64(fsum.Sum(tenths)); !sameFloat(got, want) {
+		t.Errorf("Sum = %v, want %v", got, want)
 	}
-	if got := fsum.SumSeq(slices.Values(tenths)); got != 1 {
-		t.Errorf("SumSeq = %v, want 1", got)
+	if got := float64(fsum.SumSeq(slices.Values(tenths))); !sameFloat(got, want) {
+		t.Errorf("SumSeq = %v, want %v", got, want)
 	}
 }
 
 func TestAccumulatorZeroValueIsEmptySum(t *testing.T) {
 	var acc fsum.Accumulator
-	if got := acc.Sum(); got != 0 || !math.Signbit(got) {
-		t.Errorf("zero value Sum = %v, want -0", got)
+	if got, want := acc.Sum(), oracleSum(nil); !sameFloat(got, want) {
+		t.Errorf("zero value Sum = %v, want %v", got, want)
 	}
 }
 
 func TestAccumulatorSumIsRepeatableAndAddContinues(t *testing.T) {
-	huge, tiny := 1e100, 1.0
+	xs := []float64{math.MaxFloat64, math.Ldexp(1, 970), -math.SmallestNonzeroFloat64, 1e16, -math.MaxFloat64}
 	var acc fsum.Accumulator
-	acc.Add(huge)
-	acc.Add(tiny)
-	first, second := acc.Sum(), acc.Sum()
-	if first != second || first != huge {
-		t.Fatalf("Sum twice = %v, %v; want %v both times", first, second, huge)
-	}
-	acc.Add(-huge)
-	if got := acc.Sum(); got != tiny {
-		t.Errorf("after adding -%v: Sum = %v, want %v", huge, got, tiny)
+	for i, x := range xs {
+		acc.Add(x)
+		want := oracleSum(xs[:i+1])
+		first, second := acc.Sum(), acc.Sum()
+		if !sameFloat(first, want) || !sameFloat(second, want) {
+			t.Fatalf("after %d values: Sum twice = %v, %v; want %v both times", i+1, first, second, want)
+		}
 	}
 }
 
@@ -178,12 +181,13 @@ func TestAccumulatorReset(t *testing.T) {
 	acc.Add(math.Inf(1))
 	acc.Add(3)
 	acc.Reset()
-	if got := acc.Sum(); got != 0 || !math.Signbit(got) {
-		t.Fatalf("after Reset: Sum = %v, want -0", got)
+	if got, want := acc.Sum(), oracleSum(nil); !sameFloat(got, want) {
+		t.Fatalf("after Reset: Sum = %v, want %v", got, want)
 	}
-	acc.Add(0.5)
-	if got := acc.Sum(); got != 0.5 {
-		t.Errorf("reused after Reset: Sum = %v, want 0.5", got)
+	half := 0.5
+	acc.Add(half)
+	if got, want := acc.Sum(), oracleSum([]float64{half}); !sameFloat(got, want) {
+		t.Errorf("reused after Reset: Sum = %v, want %v", got, want)
 	}
 }
 
