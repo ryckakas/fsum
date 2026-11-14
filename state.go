@@ -2,39 +2,69 @@ package fsum
 
 import "math"
 
-const (
-	two1023 = 0x1p1023
-	// maxULP is the gap between math.MaxFloat64 and the next float64 below it.
-	maxULP = 0x1p971
-)
-
-// state is Shewchuk's exact running sum with TC39 Math.sumPrecise overflow handling: the sum is
-// overflow*2^1024 plus the partials (non-overlapping, increasing magnitude). The partials travel by value
-// because a slice stored behind a pointer escapes, which would put Sum's stack buffer on the heap.
+// state is an exact running sum with Math.sumPrecise semantics: the superaccumulator holds the finite values
+// and the flags hold what it cannot (NaN, infinities and the sign of an all -0 sum).
 type state struct {
-	overflow   int64
+	acc        small
 	special    float64
 	hasSpecial bool
 	// sawNonNegZero is false while every input so far was -0, which is when the sum itself is -0.
 	sawNonNegZero bool
 }
 
-func (s *state) add(partials []float64, x float64) []float64 {
-	if math.IsNaN(x) || math.IsInf(x, 0) {
-		s.addSpecial(x)
-		return partials
+func (s *state) add(x float64) {
+	if s.acc.adds == addsPerNormalize {
+		s.acc.normalize()
 	}
-	if x != 0 || !math.Signbit(x) {
-		s.sawNonNegZero = true
-	}
-	if s.hasSpecial || x == 0 {
-		return partials
-	}
-	return s.addFinite(partials, x)
+	s.acc.adds++
+	s.put(x)
 }
 
-func (s *state) addSpecial(x float64) {
+// addSlice is add for every value of xs, with the carry bookkeeping done once per block instead of per value.
+func addSlice[E ~float64](s *state, xs []E) {
+	for len(xs) > 0 {
+		if s.acc.adds == addsPerNormalize {
+			s.acc.normalize()
+		}
+		block := xs[:min(len(xs), addsPerNormalize-int(s.acc.adds))]
+		xs = xs[len(block):]
+		s.acc.adds += int32(len(block)) //nolint:gosec // a block is at most addsPerNormalize long
+		for _, x := range block {
+			b := math.Float64bits(float64(x))
+			if isRare(b) {
+				s.putRare(float64(x), b)
+				continue
+			}
+			s.sawNonNegZero = true
+			s.acc.put(b)
+		}
+	}
+}
+
+func (s *state) put(x float64) {
+	b := math.Float64bits(x)
+	if isRare(b) {
+		s.putRare(x, b)
+		return
+	}
+	s.sawNonNegZero = true
+	s.acc.put(b)
+}
+
+// isRare reports whether b is a zero, a subnormal, an infinity or a NaN. Their exponents are 0 and 0x7ff,
+// which one unsigned compare covers.
+func isRare(b uint64) bool {
+	return b>>mantissaBits&exponentMask-1 >= exponentMask-1
+}
+
+func (s *state) putRare(x float64, b uint64) {
 	switch {
+	case b == 0:
+		s.sawNonNegZero = true
+	case b<<1 == 0:
+	case b>>mantissaBits&exponentMask == 0:
+		s.sawNonNegZero = true
+		s.acc.putSubnormal(b)
 	case !s.hasSpecial:
 		s.special, s.hasSpecial = x, true
 	case s.special != x:
@@ -42,50 +72,8 @@ func (s *state) addSpecial(x float64) {
 	}
 }
 
-func (s *state) addFinite(partials []float64, x float64) []float64 {
-	n := 0
-	for _, y := range partials {
-		if math.Abs(x) < math.Abs(y) {
-			x, y = y, x
-		}
-		hi, lo := twoSum(x, y)
-		if math.IsInf(hi, 0) {
-			sign := math.Copysign(1, hi)
-			s.overflow += int64(sign)
-			x = (x - sign*two1023) - sign*two1023
-			if math.Abs(x) < math.Abs(y) {
-				x, y = y, x
-			}
-			hi, lo = twoSum(x, y)
-		}
-		if lo != 0 {
-			partials[n] = lo
-			n++
-		}
-		x = hi
-	}
-	partials = partials[:n]
-	if x != 0 {
-		partials = append(partials, x)
-	}
-	return partials
-}
-
-func overflowSign(overflow int64) int {
-	if overflow > 0 {
-		return 1
-	}
-	return -1
-}
-
-// twoSum returns the rounded sum and its exact rounding error. It needs x == 0 or |x| >= |y|.
-func twoSum(x, y float64) (hi, lo float64) {
-	hi = x + y
-	lo = y - (hi - x)
-	return hi, lo
-}
-
-func (s *state) sum(partials []float64) float64 {
+// sum normalizes the accumulator in place, which changes its representation but not its value.
+func (s *state) sum() float64 {
 	switch {
 	case s.hasSpecial:
 		if math.IsNaN(s.special) {
@@ -94,73 +82,6 @@ func (s *state) sum(partials []float64) float64 {
 		return s.special
 	case !s.sawNonNegZero:
 		return math.Copysign(0, -1)
-	case s.overflow != 0:
-		return s.sumWithOverflow(partials)
 	}
-	return roundPartials(0, partials)
-}
-
-// sumWithOverflow folds the overflow count into the largest partial. It works on halved values so the
-// arithmetic itself cannot overflow.
-func (s *state) sumWithOverflow(partials []float64) float64 {
-	rest := partials
-	top := 0.0
-	if len(rest) > 0 {
-		top, rest = rest[len(rest)-1], rest[:len(rest)-1]
-	}
-	if s.overflow > 1 || s.overflow < -1 || (top != 0 && (s.overflow > 0) == (top > 0)) {
-		return math.Inf(overflowSign(s.overflow))
-	}
-	hi, lo := twoSum(float64(s.overflow)*two1023, top/2)
-	lo *= 2
-	if math.IsInf(2*hi, 0) {
-		return roundAtMax(hi, lo, rest)
-	}
-	hi *= 2
-	if lo == 0 {
-		return roundPartials(hi, rest)
-	}
-	hi, lo = twoSum(hi, lo)
-	if lo == 0 {
-		return roundPartials(hi, rest)
-	}
-	return roundHalfway(hi, lo, rest)
-}
-
-// roundAtMax resolves a sum within half an ULP of 2^1024. Exactly half an ULP below rounds to even, which is
-// infinity, unless a smaller partial pulls the sum back below the tie.
-func roundAtMax(hi, lo float64, rest []float64) float64 {
-	sign := math.Copysign(1, hi)
-	if hi == sign*two1023 && lo == -sign*maxULP/2 && len(rest) > 0 && math.Signbit(rest[len(rest)-1]) != math.Signbit(sign) {
-		return sign * math.MaxFloat64
-	}
-	return math.Inf(int(sign))
-}
-
-// roundPartials adds partials onto hi from the largest down, stopping at the first inexact addition.
-func roundPartials(hi float64, partials []float64) float64 {
-	lo := 0.0
-	for len(partials) > 0 {
-		y := partials[len(partials)-1]
-		partials = partials[:len(partials)-1]
-		hi, lo = twoSum(hi, y)
-		if lo != 0 {
-			break
-		}
-	}
-	return roundHalfway(hi, lo, partials)
-}
-
-// roundHalfway corrects hi when its rounding error lo is exactly half an ULP: round-half-even may have
-// rounded the wrong way if the next smaller partial has the same sign as lo.
-func roundHalfway(hi, lo float64, partials []float64) float64 {
-	if len(partials) == 0 || lo == 0 || math.Signbit(lo) != math.Signbit(partials[len(partials)-1]) {
-		return hi
-	}
-	y := lo * 2
-	x := hi + y
-	if x-hi == y {
-		return x
-	}
-	return hi
+	return s.acc.round()
 }

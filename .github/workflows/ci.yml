@@ -102,7 +102,7 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Fuzz Sum against the math/big oracle for 30s
+      - name: Fuzz each target against the math/big oracle for 30s
         run: make fuzz FUZZTIME=30s
 
       # The failing input is written under testdata/fuzz/ and would vanish with the runner.

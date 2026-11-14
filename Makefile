@@ -30,7 +30,7 @@ help:
 	@echo "  test        - go test ./..."
 	@echo "  race        - go test -race ./..."
 	@echo "  floor       - go test ./... on go.mod's minimum Go ($(GO_FLOOR))"
-	@echo "  fuzz        - deep fuzz run, FUZZTIME=$(FUZZTIME) (release gate)"
+	@echo "  fuzz        - deep fuzz run, FUZZTIME=$(FUZZTIME) per target (release gate)"
 	@echo "  cover       - race tests + coverage report (coverage.out)"
 	@echo "  vuln        - govulncheck $(GOVULNCHECK_VERSION)"
 	@echo "  check       - everything CI runs; green here should mean green in CI"
@@ -83,6 +83,8 @@ floor:
 
 fuzz:
 	go test -run '^$$' -fuzz '^FuzzSum$$' -fuzztime $(FUZZTIME) .
+	go test -run '^$$' -fuzz '^FuzzSumRepeated$$' -fuzztime $(FUZZTIME) .
+	go test -run '^$$' -fuzz '^FuzzEngines$$' -fuzztime $(FUZZTIME) .
 
 cover:
 	go test -race -coverprofile=coverage.out -covermode=atomic ./...
