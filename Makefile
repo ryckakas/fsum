@@ -14,7 +14,7 @@ GITLEAKS_IMAGE := ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79
 
 FUZZTIME ?= 10m
 
-.PHONY: help fmt lint complexity tidy-check zizmor gitleaks actionlint typos test race floor fuzz cover vuln check
+.PHONY: help fmt lint complexity tidy-check zizmor gitleaks actionlint typos test race floor fuzz cover vuln golden crosscheck check
 
 help:
 	@echo "fsum make targets:"
@@ -89,6 +89,13 @@ cover:
 
 vuln:
 	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
+
+golden:
+	$(PYTHON) -I scripts/gen_golden.py
+
+# Not part of `check`: it needs Node, and the corpus only changes through `make golden`.
+crosscheck:
+	node --js-sum-precise scripts/crosscheck.mjs
 
 check: lint complexity tidy-check zizmor gitleaks actionlint typos race floor vuln
 	go vet ./...
