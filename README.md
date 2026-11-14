@@ -121,8 +121,8 @@ bit for bit.
   Predicates" (1997): the non-overlapping partials.
 - Python's [`math.fsum`](https://github.com/python/cpython/blob/main/Modules/mathmodule.c): the summation
   loop and the half-way rounding correction.
-- The TC39 [`Math.sumPrecise` proposal](https://github.com/tc39/proposal-math-sum): the semantics and the
-  overflow handling.
+- The TC39 [`Math.sumPrecise` proposal](https://github.com/tc39/proposal-math-sum) and its polyfill by Kevin
+  Gibbons: the semantics and the overflow handling. `state.go` carries the licence notices.
 
 ## License
 
