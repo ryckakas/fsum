@@ -194,12 +194,14 @@ func TestAccumulatorReset(t *testing.T) {
 
 func TestSumDoesNotAllocate(t *testing.T) {
 	r := rand.New(rand.NewPCG(1, 2))
-	xs := make([]float64, 1000)
-	for i := range xs {
-		xs[i] = r.Float64()
-	}
-	if allocs := testing.AllocsPerRun(100, func() { fsum.Sum(xs) }); allocs != 0 {
-		t.Errorf("Sum allocates %v times per call, want 0", allocs)
+	for _, exp := range [][2]int{{-1, -1}, {-300, 300}, {-1074, 1023}} {
+		xs := make([]float64, 5000)
+		for i := range xs {
+			xs[i] = randomFinite(r, exp[0], exp[1])
+		}
+		if allocs := testing.AllocsPerRun(100, func() { fsum.Sum(xs) }); allocs != 0 {
+			t.Errorf("exponents %v: Sum allocates %v times per call, want 0", exp, allocs)
+		}
 	}
 }
 

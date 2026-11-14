@@ -107,3 +107,29 @@ func FuzzSumRepeated(f *testing.F) {
 		checkAll(t, xs, oracleSum(xs))
 	})
 }
+
+const maxEngineValues = 200_000
+
+// FuzzEngines compares the engine with the v0.1 one. Neither needs the arbitrary-precision oracle, so inputs
+// can be ten times longer than in FuzzSumRepeated.
+func FuzzEngines(f *testing.F) {
+	for _, n := range []int{2046, 2047, 4092, 4093} {
+		f.Add(append(encodeRepeated(-carryTop, n), encodeRepeated(math.Ldexp(carryTop, -60), n)...))
+		f.Add(append(encodeRepeated(math.MaxFloat64, n), encodeRepeated(-math.MaxFloat64, n)...))
+	}
+	f.Add(encodeRepeated(0.1, 4096))
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		var xs []float64
+		for len(xs) < maxEngineValues && len(data) >= 10 {
+			xs = append(xs, decodeRepeated(data)...)
+			data = data[min(len(data), 10*maxRepeatedValues):]
+		}
+		if got, want := fsum.Sum(xs), fsum.ShewchukSum(xs); !sameFloat(got, want) {
+			t.Errorf("Sum = %016x, v0.1 engine = %016x", math.Float64bits(got), math.Float64bits(want))
+		}
+		if got, want := fsum.Sum(negated(xs)), fsum.ShewchukSum(negated(xs)); !sameFloat(got, want) {
+			t.Errorf("negated: Sum = %016x, v0.1 engine = %016x", math.Float64bits(got), math.Float64bits(want))
+		}
+	})
+}
