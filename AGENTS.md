@@ -51,6 +51,9 @@ restate what the code already says.
 No em dashes (or en dashes used as dashes) in docs, the README or comments. Use a colon, a comma, parentheses or
 two sentences instead.
 
+**Licence headers are an exception too.** A file translated from third-party code keeps that code's copyright
+and licence notice in a header comment, separated from the `package` line by a blank line.
+
 **API docs are the other exception.** Every exported identifier has a doc comment; revive enforces it. The first
 sentence says what the item is, starting with its name. The rest adds only what the signature can't say.
 
