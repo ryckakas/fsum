@@ -133,3 +133,19 @@ func FuzzEngines(f *testing.F) {
 		}
 	})
 }
+
+// A sum of exactly minus one unit of a chunk once lost that chunk: the carry pass folded the sign into the
+// chunk below the tracked range.
+func TestDifferenceOfNeighbors(t *testing.T) {
+	for exp := -1022; exp <= 1023; exp++ {
+		p := math.Ldexp(1, exp)
+		for _, xs := range [][]float64{
+			{p, -math.Nextafter(p, math.Inf(1))},
+			{math.Nextafter(p, math.Inf(1)), -p},
+			{p, -math.Nextafter(p, 0)},
+			{2 * p, -p, -math.Nextafter(p, math.Inf(1))},
+		} {
+			checkAll(t, xs, oracleSum(xs))
+		}
+	}
+}

@@ -104,7 +104,8 @@ func (a *small) propagate(sign int64) int {
 	}
 	a.chunk[end] = (a.chunk[end] ^ sign) - sign + carry
 	top = a.foldMinusOnes(a.highest(end))
-	a.used = usedBetween(low, top)
+	// The fold can move the top below low.
+	a.used = usedBetween(min(low, top), top)
 	return top
 }
 
