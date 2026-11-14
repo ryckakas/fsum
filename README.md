@@ -6,6 +6,9 @@
 Exact, correctly rounded float64 summation for Go: the equivalent of Python's `math.fsum` and JavaScript's
 `Math.sumPrecise`. Zero dependencies.
 
+Also for PHP: [ryckakas/fsum-php](https://github.com/ryckakas/fsum-php) (`composer require ryckakas/fsum`), with
+the same results bit for bit, checked against this repository's golden corpus.
+
 ```go
 tenths := []float64{0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1}
 
