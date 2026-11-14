@@ -1,5 +1,7 @@
 # fsum
 
+![fsum: exact, correctly rounded float64 summation for Go](.github/cover.jpg)
+
 [![CI](https://github.com/ryckakas/fsum/actions/workflows/ci.yml/badge.svg)](https://github.com/ryckakas/fsum/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/ryckakas/fsum.svg)](https://pkg.go.dev/github.com/ryckakas/fsum)
 
@@ -136,6 +138,8 @@ about 560 bytes.
   loop and the half-way rounding correction of that first engine.
 - The TC39 [`Math.sumPrecise` proposal](https://github.com/tc39/proposal-math-sum) and its polyfill by Kevin
   Gibbons: the semantics, and the overflow handling of the first engine. `shewchuk_test.go` carries the licence notices.
+- Renee French: the Go gopher in the cover image, licensed under
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 ## License
 
